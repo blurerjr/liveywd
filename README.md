@@ -4,10 +4,10 @@
 
 This app utilizes yolo v8 for crop and weed detection in agricultural field.
 
-## Demo App
+
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://liveywd.streamlit.app/)
-
+https://liveywd.streamlit.app/
 
 
 ## Both dataset used are free to access on Kaggle
