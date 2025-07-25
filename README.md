@@ -21,7 +21,7 @@ Link to both dataset used to train the model
 
 ## Further Reading
 
-This is filler text, please replace this with a explanatory text about further relevant resources for this repo
+Below are some useful resources used in the application 
 - Ultralytics
 - Kaggle Notebook
 - Python 
