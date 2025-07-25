@@ -871,7 +871,7 @@ with col2: # Main Content
             video_transformer_factory=lambda: WeedCropDetector(model, CLASS_NAMES, COLORS, confidence_threshold),
             media_stream_constraints={"video": True, "audio": False},
             async_transform=True,
-            container_width=True # Ensure it takes available width
+            # Removed container_width=True as it's not a valid argument for this version
         )
 
         # Buttons for live camera control
@@ -977,7 +977,7 @@ st.markdown(
             </div>
         </div>
         <p class="footer-text">
-            Developed by <span class="footer-highlight">US</span> using Ultralytics YOLO and Streamlit.
+            Developed by <span class="footer-highlight">blurerjr/mu</span> using Ultralytics YOLO and Streamlit.
         </p>
     </footer>
     """,
