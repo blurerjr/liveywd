@@ -7,6 +7,7 @@ import requests
 from PIL import Image
 import os
 import time # For video processing progress simulation
+import threading # For thread-safe data access in live camera mode
 
 # Import necessary components for live camera streaming
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
@@ -271,6 +272,49 @@ custom_css = """
         70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
         100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
     }
+
+    /* Specific button styles based on keys */
+    [data-testid="stButton-detect_image_button"] > button {
+        background-color: #3B82F6; /* secondary */
+        color: white;
+        animation: pulse 2s infinite; /* Apply pulse animation */
+    }
+    [data-testid="stButton-detect_image_button"] > button:hover {
+        background-color: #2563EB; /* secondary-dark */
+    }
+
+    [data-testid="stButton-process_video_button"] > button {
+        background-color: #3B82F6; /* secondary */
+        color: white;
+    }
+    [data-testid="stButton-process_video_button"] > button:hover {
+        background-color: #2563EB; /* secondary-dark */
+    }
+
+    [data-testid="stButton-start_camera_button"] > button {
+        background-color: #16A34A; /* green-600 */
+        color: white;
+    }
+    [data-testid="stButton-start_camera_button"] > button:hover {
+        background-color: #15803D; /* green-700 */
+    }
+
+    [data-testid="stButton-stop_detection_button"] > button {
+        background-color: #EF4444; /* red-500 */
+        color: white;
+    }
+    [data-testid="stButton-stop_detection_button"] > button:hover {
+        background-color: #DC2626; /* red-600 */
+    }
+
+    [data-testid="stButton-capture_image_button"] > button {
+        background-color: #F3F4F6; /* gray-100 */
+        border: 1px solid #D1D5DB; /* border-gray-300 */
+        color: #374151; /* gray-700 */
+    }
+    [data-testid="stButton-capture_image_button"] > button:hover {
+        background-color: #E5E7EB; /* gray-200 */
+    }
 </style>
 """
 
@@ -285,19 +329,17 @@ def load_yolo_model(url):
     Uses Streamlit's caching to avoid re-downloading on every run.
     """
     try:
-        st.info("Attempting to download model...")
-        response = requests.get(url, stream=True) # Use stream=True for potentially large files
-        response.raise_for_status()  # Raise an exception for bad status codes
+        # Removed st.info messages as requested
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
 
-        # Save the model to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pt") as temp_model_file:
             for chunk in response.iter_content(chunk_size=8192):
                 temp_model_file.write(chunk)
             model_path = temp_model_file.name
 
-        st.success(f"Model downloaded to {model_path}. Loading YOLO model...")
+        # Removed st.success messages as requested
         model = YOLO(model_path)
-        st.success("YOLO model loaded successfully!")
         return model
     except requests.exceptions.RequestException as e:
         st.error(f"Error downloading the model: {e}")
@@ -313,13 +355,15 @@ class WeedCropDetector(VideoTransformerBase):
         self.class_names = class_names
         self.colors = colors
         self.confidence_threshold = confidence_threshold
-        self.crop_count = 0
-        self.weed_count = 0
+        # Use a shared dictionary and lock for thread-safe updates to UI placeholders
+        if 'live_counts' not in st.session_state:
+            st.session_state.live_counts = {'crop': 0, 'weed': 0}
+        if 'live_counts_lock' not in st.session_state:
+            st.session_state.live_counts_lock = threading.Lock()
 
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
 
-        # Perform inference
         results = self.model.predict(img, conf=self.confidence_threshold, verbose=False)
 
         annotated_img = img.copy()
@@ -350,8 +394,11 @@ class WeedCropDetector(VideoTransformerBase):
                 cv2.rectangle(annotated_img, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
                 cv2.putText(annotated_img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
-        self.crop_count = current_crop_count
-        self.weed_count = current_weed_count
+        # Update counts in session state thread-safely
+        with st.session_state.live_counts_lock:
+            st.session_state.live_counts['crop'] = current_crop_count
+            st.session_state.live_counts['weed'] = current_weed_count
+            
         return annotated_img
 
 # --- UI and Main Logic ---
@@ -545,6 +592,7 @@ with col2: # Main Content
             img_array = np.array(image)
 
             original_image_placeholder.image(image, caption="Uploaded Image", use_container_width=True)
+            # Display a placeholder for the processed image initially
             processed_image_placeholder.markdown(
                 """
                 <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -558,8 +606,10 @@ with col2: # Main Content
                 unsafe_allow_html=True
             )
 
+        # Consolidated "Detect Weeds & Crops" button
+        detect_button_clicked = st.button("Detect Weeds & Crops", key="detect_image_button")
 
-        if uploaded_file is not None and st.button("Detect Weeds & Crops", key="detect_image_button"):
+        if detect_button_clicked and uploaded_file is not None:
             with st.spinner("Processing image..."):
                 results = model.predict(img_array, conf=confidence_threshold)
                 annotated_img_array = img_array.copy()
@@ -619,19 +669,19 @@ with col2: # Main Content
                         </div>
                         """, unsafe_allow_html=True
                     )
-        else:
-            st.markdown(
-                """
-                <div style="margin-top: 1.5rem; display: flex; align-items: center; gap: 1rem;">
-                    <button class="stButton" style="background-color:#3B82F6; color:white;">
-                        <i class="fas fa-search"></i> Detect Weeds & Crops
-                    </button>
-                    <div style="background-color:#FFFBEB; border:1px solid #FDE68A; border-radius:0.5rem; padding:0.5rem 1rem; color:#92400E; font-size:0.875rem; flex:1; display:flex; align-items:center; gap:0.25rem;">
-                        <i class="fas fa-info-circle"></i> Upload an image and click detect to process.
-                    </div>
+        elif detect_button_clicked and uploaded_file is None:
+            st.warning("Please upload an image before clicking 'Detect Weeds & Crops'.")
+        
+        # Info message below the button
+        st.markdown(
+            """
+            <div style="margin-top: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+                <div style="background-color:#FFFBEB; border:1px solid #FDE68A; border-radius:0.5rem; padding:0.5rem 1rem; color:#92400E; font-size:0.875rem; flex:1; display:flex; align-items:center; gap:0.25rem;">
+                    <i class="fas fa-info-circle"></i> Upload an image and click detect to process.
                 </div>
-                """, unsafe_allow_html=True
-            )
+            </div>
+            """, unsafe_allow_html=True
+        )
         st.markdown('</div>', unsafe_allow_html=True) # Close detection-card
 
     # --- Video Detection Logic ---
@@ -772,19 +822,19 @@ with col2: # Main Content
                 cap.release()
                 os.remove(video_path)
                 st.success(f"Video processing complete! Total Crops: {total_crops}, Total Weeds: {total_weeds}")
-        else:
-            st.markdown(
-                """
-                <div style="margin-top: 1.5rem; display: flex; align-items: center; gap: 1rem;">
-                    <button class="stButton" style="background-color:#3B82F6; color:white;">
-                        <i class="fas fa-play-circle"></i> Process Video
-                    </button>
-                    <div style="background-color:#EFF6FF; border:1px solid #DBEAFE; border-radius:0.5rem; padding:0.5rem 1rem; color:#1E40AF; font-size:0.875rem; flex:1; display:flex; align-items:center; gap:0.25rem;">
-                        <i class="fas fa-info-circle"></i> Processing may take time depending on video length.
-                    </div>
+        elif process_video_button and uploaded_file is None:
+            st.warning("Please upload a video before clicking 'Process Video'.")
+        
+        # Info message below the button
+        st.markdown(
+            """
+            <div style="margin-top: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+                <div style="background-color:#EFF6FF; border:1px solid #DBEAFE; border-radius:0.5rem; padding:0.5rem 1rem; color:#1E40AF; font-size:0.875rem; flex:1; display:flex; align-items:center; gap:0.25rem;">
+                    <i class="fas fa-info-circle"></i> Processing may take time depending on video length.
                 </div>
-                """, unsafe_allow_html=True
-            )
+            </div>
+            """, unsafe_allow_html=True
+        )
         st.markdown('</div>', unsafe_allow_html=True) # Close detection-card
 
     # --- Live Camera Detection Logic ---
@@ -799,39 +849,16 @@ with col2: # Main Content
             unsafe_allow_html=True
         )
 
-        # Placeholder for the webrtc_streamer output
-        webrtc_container = st.container()
-        
         # Placeholders for live stats
         live_status_col, live_detection_col = st.columns(2)
         camera_status_placeholder = live_status_col.empty()
         active_detections_placeholder = live_detection_col.empty()
 
-        # Initial status display
-        camera_status_placeholder.markdown(
-            """
-            <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Camera Status</h3>
-            <div style="display: flex; align-items: center;">
-                <div class="status-indicator bg-red-500"></div>
-                <span class="status-text">Not Active</span>
-            </div>
-            """, unsafe_allow_html=True
-        )
-        active_detections_placeholder.markdown(
-            """
-            <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Active Detections</h3>
-            <div style="display:flex; gap:1rem;">
-                <div style="text-align:center;">
-                    <p style="color:#4B5563; font-size:0.875rem;">Crops</p>
-                    <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">0</p>
-                </div>
-                <div style="text-align:center;">
-                    <p style="color:#4B5563; font-size:0.875rem;">Weeds</p>
-                    <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">0</p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True
-        )
+        # Initialize session state for live counts if not already present
+        if 'live_counts' not in st.session_state:
+            st.session_state.live_counts = {'crop': 0, 'weed': 0}
+        if 'live_counts_lock' not in st.session_state:
+            st.session_state.live_counts_lock = threading.Lock()
 
         # Use webrtc_streamer to get the live camera feed
         # We need to capture the context to access the transformer's counts
@@ -847,37 +874,80 @@ with col2: # Main Content
             container_width=True # Ensure it takes available width
         )
 
+        # Buttons for live camera control
+        col_start, col_stop, col_capture = st.columns([1, 1, 2]) # Adjust column width for buttons
+        with col_start:
+            start_button = st.button("Start Camera", key="start_camera_button")
+        with col_stop:
+            stop_button = st.button("Stop Detection", key="stop_detection_button")
+        with col_capture:
+            capture_button = st.button("Capture Image", key="capture_image_button")
+            # Note: Capturing image from webrtc_streamer requires more advanced setup
+            # You'd typically need to access the last frame from the transformer and save it.
+            # This is a placeholder for the UI element.
+
         # Update live stats based on the transformer's internal counts
+        # This loop runs continuously to update the UI with detection counts
+        # It's not ideal for high-performance apps as it forces Streamlit reruns,
+        # but it's the standard way to get data out of the transformer for display.
         if webrtc_ctx.video_transformer:
-            # This loop runs continuously to update the UI with detection counts
-            # It's not ideal for high-performance apps as it reruns Streamlit,
-            # but it's the standard way to get data out of the transformer for display.
+            camera_status_placeholder.markdown(
+                """
+                <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Camera Status</h3>
+                <div style="display: flex; align-items: center;">
+                    <div class="status-indicator bg-green-500 pulse-animation"></div>
+                    <span class="status-text">Active</span>
+                </div>
+                """, unsafe_allow_html=True
+            )
+            # Loop to continuously update the detection counts
             while True:
-                camera_status_placeholder.markdown(
-                    """
-                    <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Camera Status</h3>
-                    <div style="display: flex; align-items: center;">
-                        <div class="status-indicator bg-green-500 pulse-animation"></div>
-                        <span class="status-text">Active</span>
-                    </div>
-                    """, unsafe_allow_html=True
-                )
+                with st.session_state.live_counts_lock:
+                    crop_count = st.session_state.live_counts['crop']
+                    weed_count = st.session_state.live_counts['weed']
+
                 active_detections_placeholder.markdown(
                     f"""
                     <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Active Detections</h3>
                     <div style="display:flex; gap:1rem;">
                         <div style="text-align:center;">
                             <p style="color:#4B5563; font-size:0.875rem;">Crops</p>
-                            <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">{webrtc_ctx.video_transformer.crop_count}</p>
+                            <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">{crop_count}</p>
                         </div>
                         <div style="text-align:center;">
                             <p style="color:#4B5563; font-size:0.875rem;">Weeds</p>
-                            <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">{webrtc_ctx.video_transformer.weed_count}</p>
+                            <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">{weed_count}</p>
                         </div>
                     </div>
                     """, unsafe_allow_html=True
                 )
                 time.sleep(0.5) # Update every 0.5 seconds to reduce reruns
+        else:
+            # Initial status display when camera is not active
+            camera_status_placeholder.markdown(
+                """
+                <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Camera Status</h3>
+                <div style="display: flex; align-items: center;">
+                    <div class="status-indicator bg-red-500"></div>
+                    <span class="status-text">Not Active</span>
+                </div>
+                """, unsafe_allow_html=True
+            )
+            active_detections_placeholder.markdown(
+                """
+                <h3 style="font-weight: 500; color: #374151; margin-bottom: 0.5rem;">Active Detections</h3>
+                <div style="display:flex; gap:1rem;">
+                    <div style="text-align:center;">
+                        <p style="color:#4B5563; font-size:0.875rem;">Crops</p>
+                        <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">0</p>
+                    </div>
+                    <div style="text-align:center;">
+                        <p style="color:#4B5563; font-size:0.875rem;">Weeds</p>
+                        <p style="font-weight:bold; color:#1F2937; font-size:1.25rem;">0</p>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True
+            )
 
         st.markdown(
             """
@@ -907,7 +977,7 @@ st.markdown(
             </div>
         </div>
         <p class="footer-text">
-            Developed by <span class="footer-highlight">US</span> using Ultralytics YOLO v8 and Streamlit.
+            Developed by <span class="footer-highlight">US</span> using Ultralytics YOLO and Streamlit.
         </p>
     </footer>
     """,
