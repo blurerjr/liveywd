@@ -323,14 +323,12 @@ def download_kaggle_dataset(dataset_slug, download_path):
         
         api.dataset_download_files(dataset_slug, path=download_path, unzip=True)
         
-        # Target the valid/images folder specifically
         valid_images_path = os.path.join(download_path, 'valid', 'images')
         image_extensions = ['*.jpg', '*.jpeg', '*.png']
         image_files = []
         for ext in image_extensions:
             image_files.extend(glob.glob(os.path.join(valid_images_path, ext)))
         
-        # Limit to first 10 images to keep dropdown manageable
         image_files = image_files[:10]
         
         return image_files
@@ -493,7 +491,7 @@ with col1:
     )
     confidence_threshold = st.slider(
         "Confidence Threshold",
-        0.0, 1.0, 0.3, 0.05,
+        0.0, 1.0, 0.05, 0.05,
         key="confidence_slider",
         label_visibility="collapsed"
     )
