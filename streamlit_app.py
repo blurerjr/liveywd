@@ -323,7 +323,7 @@ def download_kaggle_dataset(dataset_slug, download_path):
         
         api.dataset_download_files(dataset_slug, path=download_path, unzip=True)
         
-        valid_images_path = os.path.join(download_path, 'train', 'images')
+        valid_images_path = os.path.join(download_path, 'valid', 'images')
         image_extensions = ['*.jpg', '*.jpeg', '*.png']
         image_files = []
         for ext in image_extensions:
@@ -491,7 +491,7 @@ with col1:
     )
     confidence_threshold = st.slider(
         "Confidence Threshold",
-        0.0, 1.0, 0.05, 0.05,
+        min_value=0.0, max_value=1.0, value=0.05, step=0.05,
         key="confidence_slider",
         label_visibility="collapsed"
     )
