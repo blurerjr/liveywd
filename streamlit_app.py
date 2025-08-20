@@ -323,7 +323,7 @@ def download_kaggle_dataset(dataset_slug, download_path):
         
         api.dataset_download_files(dataset_slug, path=download_path, unzip=True)
         
-        valid_images_path = os.path.join(download_path, 'valid', 'images')
+        valid_images_path = os.path.join(download_path, 'test', 'images')
         image_extensions = ['*.jpg', '*.jpeg', '*.png']
         image_files = []
         for ext in image_extensions:
