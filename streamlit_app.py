@@ -329,7 +329,7 @@ def download_kaggle_dataset(dataset_slug, download_path):
         for ext in image_extensions:
             image_files.extend(glob.glob(os.path.join(valid_images_path, ext)))
         
-        image_files = image_files[:10]
+        image_files = image_files[:16]
         
         return image_files
     except Exception as e:
