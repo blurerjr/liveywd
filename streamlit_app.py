@@ -323,13 +323,13 @@ def download_kaggle_dataset(dataset_slug, download_path):
         
         api.dataset_download_files(dataset_slug, path=download_path, unzip=True)
         
-        valid_images_path = os.path.join(download_path, 'test', 'images')
+        valid_images_path = os.path.join(download_path, 'train', 'images')
         image_extensions = ['*.jpg', '*.jpeg', '*.png']
         image_files = []
         for ext in image_extensions:
             image_files.extend(glob.glob(os.path.join(valid_images_path, ext)))
         
-        image_files = image_files[:16]
+        image_files = image_files[:20]
         
         return image_files
     except Exception as e:
