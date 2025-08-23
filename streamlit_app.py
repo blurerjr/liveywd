@@ -987,7 +987,7 @@ st.markdown(
             </div>
         </div>
         <p class="footer-text">
-            Developed by <span class="footer-highlight">blurerjr/mu</span> using Ultralytics YOLO and Streamlit.
+            Developed by <span class="footer-highlight">Kwasu Students</span> using Ultralytics YOLO and Streamlit.
         </p>
     </footer>
     """,
